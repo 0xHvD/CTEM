@@ -1,0 +1,147 @@
+/* CTEM Custom Theme */
+
+:root {
+  /* Security-fokussierte Farbpalette */
+  --ctem-primary: #1e3a8a;
+  --ctem-secondary: #64748b;
+  --ctem-success: #059669;
+  --ctem-danger: #dc2626;
+  --ctem-warning: #d97706;
+  --ctem-info: #0284c7;
+  --ctem-light: #f8fafc;
+  --ctem-dark: #0f172a;
+  
+  /* Severity Colors */
+  --severity-critical: #7f1d1d;
+  --severity-high: #dc2626;
+  --severity-medium: #d97706;
+  --severity-low: #059669;
+  --severity-info: #0284c7;
+}
+
+/* Bootstrap Overrides */
+.btn-primary {
+  background-color: var(--ctem-primary);
+  border-color: var(--ctem-primary);
+}
+
+.btn-primary:hover {
+  background-color: #1e40af;
+  border-color: #1e40af;
+}
+
+/* Custom Components */
+.sidebar {
+  background-color: var(--ctem-dark);
+  min-height: 100vh;
+}
+
+.navbar-brand {
+  font-weight: 700;
+  color: var(--ctem-primary) !important;
+}
+
+/* Severity Badges */
+.severity-critical {
+  background-color: var(--severity-critical) !important;
+  color: white;
+}
+
+.severity-high {
+  background-color: var(--severity-high) !important;
+  color: white;
+}
+
+.severity-medium {
+  background-color: var(--severity-medium) !important;
+  color: white;
+}
+
+.severity-low {
+  background-color: var(--severity-low) !important;
+  color: white;
+}
+
+.severity-info {
+  background-color: var(--severity-info) !important;
+  color: white;
+}
+
+/* Cards */
+.stat-card {
+  border-left: 4px solid var(--ctem-primary);
+  transition: transform 0.2s ease-in-out;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Tables */
+.table-hover tbody tr:hover {
+  background-color: rgba(30, 58, 138, 0.05);
+}
+
+/* Loading States */
+.loading-spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid var(--ctem-primary);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive Utilities */
+@media (max-width: 768px) {
+  .sidebar {
+    min-height: auto;
+  }
+  
+  .stat-card {
+    margin-bottom: 1rem;
+  }
+}
+
+/* Dashboard specific */
+.dashboard-header {
+  background: linear-gradient(135deg, var(--ctem-primary) 0%, #3b82f6 100%);
+  color: white;
+  padding: 2rem 0;
+}
+
+.metric-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.metric-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ctem-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ctem-primary);
+}
