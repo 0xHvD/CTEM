@@ -27,16 +27,16 @@
             <li class="nav-item">
               <router-link class="nav-link" to="/assets">
                 <i class="bi bi-hdd-stack me-1"></i>Assets
-                <span v-if="assetsStore.criticalAssets.length > 0" class="badge bg-danger ms-1">
-                  {{ assetsStore.criticalAssets.length }}
+                <span v-if="assetStats && assetStats.critical > 0" class="badge bg-danger ms-1">
+                  {{ assetStats.critical }}
                 </span>
               </router-link>
             </li>
             <li class="nav-item">
               <router-link class="nav-link" to="/vulnerabilities">
                 <i class="bi bi-exclamation-triangle me-1"></i>Vulnerabilities
-                <span v-if="vulnerabilitiesStore.criticalVulnerabilities.length > 0" class="badge bg-danger ms-1">
-                  {{ vulnerabilitiesStore.criticalVulnerabilities.length }}
+                <span v-if="vulnerabilityStats && vulnerabilityStats.critical > 0" class="badge bg-danger ms-1">
+                  {{ vulnerabilityStats.critical }}
                 </span>
               </router-link>
             </li>
@@ -60,7 +60,7 @@
               data-bs-toggle="dropdown"
             >
               <i class="bi bi-person-circle me-1"></i>
-              {{ authStore.currentUser?.name || 'User' }}
+              {{ authStore.user?.name || 'User' }}
             </button>
             <ul class="dropdown-menu">
               <li>
@@ -129,16 +129,16 @@
                   <h6 class="card-title text-white mb-2">Quick Stats</h6>
                   <div class="d-flex justify-content-between text-white mb-1">
                     <small>Assets:</small>
-                    <small class="fw-bold">{{ dashboardStore.metrics.totalAssets }}</small>
+                    <small class="fw-bold">{{ dashboardStore.stats.totalAssets }}</small>
                   </div>
                   <div class="d-flex justify-content-between text-white mb-1">
-                    <small>Vulnerabilities:</small>
-                    <small class="fw-bold text-danger">{{ dashboardStore.metrics.activeVulnerabilities }}</small>
+                    <small>Critical Vulns:</small>
+                    <small class="fw-bold text-danger">{{ dashboardStore.stats.criticalVulnerabilities }}</small>
                   </div>
                   <div class="d-flex justify-content-between text-white">
                     <small>Risk Score:</small>
-                    <small class="fw-bold" :class="getRiskScoreClass(dashboardStore.metrics.avgRiskScore)">
-                      {{ dashboardStore.metrics.avgRiskScore }}
+                    <small class="fw-bold" :class="getRiskScoreClass(dashboardStore.stats.averageRiskScore)">
+                      {{ dashboardStore.stats.averageRiskScore.toFixed(1) }}
                     </small>
                   </div>
                 </div>
@@ -304,6 +304,10 @@ const activeToasts = ref<Array<{
   type: string
 }>>([])
 
+// Computed properties for stats
+const assetStats = computed(() => assetsStore.assetStats)
+const vulnerabilityStats = computed(() => vulnerabilitiesStore.vulnerabilityStats)
+
 // Computed
 const isGlobalLoading = computed(() => 
   dashboardStore.isLoading || 
@@ -403,13 +407,13 @@ const showToast = (notification: any) => {
 
 // Lifecycle
 onMounted(async () => {
-  // Initial data fetch
+  // Initial data fetch - using correct store methods
   try {
     await Promise.all([
-      dashboardStore.fetchMetrics(),
+      dashboardStore.fetchDashboardStats(), // Changed from fetchMetrics()
       vulnerabilitiesStore.fetchVulnerabilities(),
-      assetsStore.fetchAssets(),
-      notificationsStore.fetchNotifications()
+      assetsStore.fetchAssets()
+      // Note: notificationsStore doesn't have fetchNotifications method based on the store
     ])
   } catch (error) {
     console.error('Failed to load initial data:', error)
@@ -426,8 +430,7 @@ onMounted(async () => {
   setInterval(async () => {
     try {
       await Promise.all([
-        dashboardStore.fetchMetrics(),
-        notificationsStore.fetchNotifications()
+        dashboardStore.fetchDashboardStats() // Changed from fetchMetrics()
       ])
     } catch (error) {
       console.warn('Background refresh failed:', error)

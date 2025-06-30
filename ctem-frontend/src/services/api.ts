@@ -80,6 +80,77 @@ export interface DashboardStats {
   patchingEfficiency: number
 }
 
+// Report-Typen
+export interface Report {
+  id: string
+  name: string
+  description: string
+  type: 'assets' | 'vulnerabilities' | 'risks' | 'compliance'
+  status: 'pending' | 'generating' | 'completed' | 'failed' | 'scheduled'
+  format: 'pdf' | 'excel' | 'csv' | 'html'
+  createdAt: string
+  completedAt?: string
+  createdBy: string
+  size?: number
+  downloadUrl?: string
+  progress?: number
+  parameters?: Record<string, any>
+  schedule?: {
+    frequency: 'once' | 'daily' | 'weekly' | 'monthly'
+    nextRun?: string
+    lastRun?: string
+  }
+  recipients?: string[]
+  error?: string
+}
+
+// Compliance-Typen
+export interface ComplianceFramework {
+  id: string
+  name: string
+  version: string
+  description?: string
+  status: 'active' | 'inactive'
+  controls: ComplianceControl[]
+  score: number
+  lastAssessed: string
+}
+
+export interface ComplianceControl {
+  id: string
+  frameworkId: string
+  controlId: string
+  title: string
+  description: string
+  category: string
+  status: 'implemented' | 'partial' | 'missing'
+  lastAssessed: string
+  evidence?: string[]
+  notes?: string
+}
+
+export interface ComplianceStatus {
+  frameworkId: string
+  overallScore: number
+  controlCounts: {
+    total: number
+    implemented: number
+    partial: number
+    missing: number
+  }
+  gaps: ComplianceGap[]
+}
+
+export interface ComplianceGap {
+  id: string
+  frameworkId: string
+  controlId: string
+  title: string
+  description: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  recommendation: string
+}
+
 class ApiService {
   private api: AxiosInstance
 
@@ -212,6 +283,21 @@ class ApiService {
     return response.data
   }
 
+  async createVulnerability(vulnerability: Omit<Vulnerability, 'id'>): Promise<ApiResponse<Vulnerability>> {
+    const response = await this.api.post('/vulnerabilities', vulnerability)
+    return response.data
+  }
+
+  async updateVulnerability(id: string, vulnerability: Partial<Vulnerability>): Promise<ApiResponse<Vulnerability>> {
+    const response = await this.api.put(`/vulnerabilities/${id}`, vulnerability)
+    return response.data
+  }
+
+  async deleteVulnerability(id: string): Promise<ApiResponse> {
+    const response = await this.api.delete(`/vulnerabilities/${id}`)
+    return response.data
+  }
+
   // Risks API
   async getRisks(params?: {
     page?: number
@@ -237,6 +323,11 @@ class ApiService {
 
   async updateRisk(id: string, risk: Partial<Risk>): Promise<ApiResponse<Risk>> {
     const response = await this.api.put(`/risks/${id}`, risk)
+    return response.data
+  }
+
+  async deleteRisk(id: string): Promise<ApiResponse> {
+    const response = await this.api.delete(`/risks/${id}`)
     return response.data
   }
 
@@ -267,24 +358,205 @@ class ApiService {
     return response.data
   }
 
-  async getReport(reportId: string): Promise<ApiResponse<any>> {
+  async getReport(reportId: string): Promise<ApiResponse<Report>> {
     const response = await this.api.get(`/reports/${reportId}`)
     return response.data
   }
 
-  async getReports(): Promise<ApiResponse<any[]>> {
+  async getReports(): Promise<ApiResponse<Report[]>> {
     const response = await this.api.get('/reports')
     return response.data
   }
 
+  async deleteReport(reportId: string): Promise<ApiResponse> {
+    const response = await this.api.delete(`/reports/${reportId}`)
+    return response.data
+  }
+
+  async downloadReport(reportId: string): Promise<Blob> {
+    const response = await this.api.get(`/reports/${reportId}/download`, {
+      responseType: 'blob'
+    })
+    return response.data
+  }
+
+  async scheduleReport(reportData: {
+    type: string
+    name: string
+    schedule: any
+    parameters?: any
+  }): Promise<ApiResponse<Report>> {
+    const response = await this.api.post('/reports/schedule', reportData)
+    return response.data
+  }
+
+  async cancelReport(reportId: string): Promise<ApiResponse> {
+    const response = await this.api.post(`/reports/${reportId}/cancel`)
+    return response.data
+  }
+
   // Compliance API
-  async getComplianceFrameworks(): Promise<ApiResponse<any[]>> {
+  async getComplianceFrameworks(): Promise<ApiResponse<ComplianceFramework[]>> {
     const response = await this.api.get('/compliance/frameworks')
     return response.data
   }
 
-  async getComplianceStatus(frameworkId?: string): Promise<ApiResponse<any>> {
+  async getComplianceFramework(frameworkId: string): Promise<ApiResponse<ComplianceFramework>> {
+    const response = await this.api.get(`/compliance/frameworks/${frameworkId}`)
+    return response.data
+  }
+
+  async createComplianceFramework(framework: Omit<ComplianceFramework, 'id' | 'score' | 'lastAssessed' | 'controls'>): Promise<ApiResponse<ComplianceFramework>> {
+    const response = await this.api.post('/compliance/frameworks', framework)
+    return response.data
+  }
+
+  async updateComplianceFramework(frameworkId: string, framework: Partial<ComplianceFramework>): Promise<ApiResponse<ComplianceFramework>> {
+    const response = await this.api.put(`/compliance/frameworks/${frameworkId}`, framework)
+    return response.data
+  }
+
+  async deleteComplianceFramework(frameworkId: string): Promise<ApiResponse> {
+    const response = await this.api.delete(`/compliance/frameworks/${frameworkId}`)
+    return response.data
+  }
+
+  async getComplianceStatus(frameworkId?: string): Promise<ApiResponse<ComplianceStatus>> {
     const response = await this.api.get('/compliance/status', { params: { frameworkId } })
+    return response.data
+  }
+
+  async getComplianceControls(frameworkId: string): Promise<ApiResponse<ComplianceControl[]>> {
+    const response = await this.api.get(`/compliance/frameworks/${frameworkId}/controls`)
+    return response.data
+  }
+
+  async updateComplianceControl(frameworkId: string, controlId: string, control: Partial<ComplianceControl>): Promise<ApiResponse<ComplianceControl>> {
+    const response = await this.api.put(`/compliance/frameworks/${frameworkId}/controls/${controlId}`, control)
+    return response.data
+  }
+
+  async assessComplianceControl(frameworkId: string, controlId: string, assessment: {
+    status: ComplianceControl['status']
+    evidence?: string[]
+    notes?: string
+  }): Promise<ApiResponse<ComplianceControl>> {
+    const response = await this.api.post(`/compliance/frameworks/${frameworkId}/controls/${controlId}/assess`, assessment)
+    return response.data
+  }
+
+  async getComplianceGaps(frameworkId?: string): Promise<ApiResponse<ComplianceGap[]>> {
+    const response = await this.api.get('/compliance/gaps', { params: { frameworkId } })
+    return response.data
+  }
+
+  // User Management API (for admin users)
+  async getUsers(): Promise<ApiResponse<any[]>> {
+    const response = await this.api.get('/users')
+    return response.data
+  }
+
+  async getUser(userId: string): Promise<ApiResponse<any>> {
+    const response = await this.api.get(`/users/${userId}`)
+    return response.data
+  }
+
+  async createUser(user: any): Promise<ApiResponse<any>> {
+    const response = await this.api.post('/users', user)
+    return response.data
+  }
+
+  async updateUser(userId: string, user: any): Promise<ApiResponse<any>> {
+    const response = await this.api.put(`/users/${userId}`, user)
+    return response.data
+  }
+
+  async deleteUser(userId: string): Promise<ApiResponse> {
+    const response = await this.api.delete(`/users/${userId}`)
+    return response.data
+  }
+
+  // Settings API
+  async getSettings(): Promise<ApiResponse<any>> {
+    const response = await this.api.get('/settings')
+    return response.data
+  }
+
+  async updateSettings(settings: any): Promise<ApiResponse<any>> {
+    const response = await this.api.put('/settings', settings)
+    return response.data
+  }
+
+  // System API
+  async getSystemInfo(): Promise<ApiResponse<any>> {
+    const response = await this.api.get('/system/info')
+    return response.data
+  }
+
+  async getSystemHealth(): Promise<ApiResponse<any>> {
+    const response = await this.api.get('/system/health')
+    return response.data
+  }
+
+  async getSystemLogs(params?: {
+    level?: string
+    startDate?: string
+    endDate?: string
+    limit?: number
+  }): Promise<ApiResponse<any[]>> {
+    const response = await this.api.get('/system/logs', { params })
+    return response.data
+  }
+
+  // Scanning API
+  async startScan(assetIds?: string[]): Promise<ApiResponse<{ scanId: string }>> {
+    const response = await this.api.post('/scan/start', { assetIds })
+    return response.data
+  }
+
+  async getScanStatus(scanId: string): Promise<ApiResponse<any>> {
+    const response = await this.api.get(`/scan/${scanId}/status`)
+    return response.data
+  }
+
+  async getScanHistory(params?: {
+    page?: number
+    limit?: number
+    startDate?: string
+    endDate?: string
+  }): Promise<ApiResponse<any>> {
+    const response = await this.api.get('/scan/history', { params })
+    return response.data
+  }
+
+  async cancelScan(scanId: string): Promise<ApiResponse> {
+    const response = await this.api.post(`/scan/${scanId}/cancel`)
+    return response.data
+  }
+
+  // Notifications API
+  async getNotifications(params?: {
+    page?: number
+    limit?: number
+    read?: boolean
+    type?: string
+  }): Promise<ApiResponse<any>> {
+    const response = await this.api.get('/notifications', { params })
+    return response.data
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<ApiResponse> {
+    const response = await this.api.put(`/notifications/${notificationId}/read`)
+    return response.data
+  }
+
+  async markAllNotificationsAsRead(): Promise<ApiResponse> {
+    const response = await this.api.put('/notifications/read-all')
+    return response.data
+  }
+
+  async deleteNotification(notificationId: string): Promise<ApiResponse> {
+    const response = await this.api.delete(`/notifications/${notificationId}`)
     return response.data
   }
 }
