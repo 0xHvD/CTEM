@@ -1,15 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { apiService, type ApiError } from '@/services/api'
+import axios from 'axios'
 
 interface User {
   id: string
   email: string
   name: string
-  role: 'admin' | 'analyst' | 'viewer'
+  role: 'ADMIN' | 'ANALYST' | 'VIEWER'
   permissions: string[]
-  lastLogin?: string
   avatar?: string
+  lastLogin?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 interface LoginCredentials {
@@ -18,224 +21,292 @@ interface LoginCredentials {
   rememberMe?: boolean
 }
 
+interface AuthResponse {
+  success: boolean
+  data: {
+    token: string
+    refreshToken: string
+    user: User
+  }
+  message: string
+}
+
 export const useAuthStore = defineStore('auth', () => {
   // State
   const user = ref<User | null>(null)
   const token = ref<string | null>(null)
   const refreshToken = ref<string | null>(null)
   const isLoading = ref(false)
-  const error = ref<string | null>(null)
+  const isInitialized = ref(false)
 
-  // Getters
+  // Computed
   const isAuthenticated = computed(() => !!token.value && !!user.value)
   
-  const userRole = computed(() => user.value?.role || null)
+  const hasRole = computed(() => (role: string) => {
+    return user.value?.role === role
+  })
   
-  const userPermissions = computed(() => user.value?.permissions || [])
+  const hasPermission = computed(() => (permission: string) => {
+    if (user.value?.role === 'ADMIN') return true
+    return user.value?.permissions?.includes(permission) ?? false
+  })
+
+  const isAdmin = computed(() => user.value?.role === 'ADMIN')
+  const isAnalyst = computed(() => user.value?.role === 'ANALYST')
+  const isViewer = computed(() => user.value?.role === 'VIEWER')
   
-  const isAdmin = computed(() => user.value?.role === 'admin')
+  // Additional permission computed properties
+  const canEditSettings = computed(() => {
+    return isAdmin.value || hasPermission.value('settings:write')
+  })
   
-  const isAnalyst = computed(() => user.value?.role === 'analyst' || user.value?.role === 'admin')
+  const canManageUsers = computed(() => {
+    return isAdmin.value || hasPermission.value('users:manage')
+  })
   
-  const canViewAssets = computed(() => 
-    userPermissions.value.includes('assets:read') || isAdmin.value
-  )
-  
-  const canEditAssets = computed(() => 
-    userPermissions.value.includes('assets:write') || isAdmin.value
-  )
-  
-  const canViewVulnerabilities = computed(() => 
-    userPermissions.value.includes('vulnerabilities:read') || isAnalyst.value
-  )
-  
-  const canEditVulnerabilities = computed(() => 
-    userPermissions.value.includes('vulnerabilities:write') || isAdmin.value
-  )
-  
-  const canViewReports = computed(() => 
-    userPermissions.value.includes('reports:read') || isAnalyst.value
-  )
-  
-  const canGenerateReports = computed(() => 
-    userPermissions.value.includes('reports:write') || isAdmin.value
-  )
-  
-  const canViewSettings = computed(() => 
-    userPermissions.value.includes('settings:read') || isAdmin.value
-  )
-  
-  const canEditSettings = computed(() => 
-    userPermissions.value.includes('settings:write') || isAdmin.value
-  )
+  const canManageSystem = computed(() => {
+    return isAdmin.value || hasPermission.value('system:manage')
+  })
 
   // Actions
-  async function login(credentials: LoginCredentials) {
-    isLoading.value = true
-    error.value = null
+  const initializeAuth = async () => {
+    if (isInitialized.value) return
 
     try {
-      const response = await apiService.login(credentials.email, credentials.password)
-      
-      if (response.success) {
-        token.value = response.data.token
-        user.value = response.data.user
-        
-        // Store in localStorage if remember me is checked
-        if (credentials.rememberMe) {
-          localStorage.setItem(
-            import.meta.env.VITE_TOKEN_STORAGE_KEY || 'ctem_auth_token', 
-            response.data.token
-          )
-        } else {
-          sessionStorage.setItem(
-            import.meta.env.VITE_TOKEN_STORAGE_KEY || 'ctem_auth_token', 
-            response.data.token
-          )
-        }
-        
-        // Store user data
-        localStorage.setItem('ctem_user_data', JSON.stringify(response.data.user))
-        
-        return response.data.user
-      } else {
-        throw new Error(response.message || 'Login failed')
+      // Get tokens from localStorage
+      const storedToken = localStorage.getItem('ctem_token')
+      const storedRefreshToken = localStorage.getItem('ctem_refresh_token')
+
+      if (storedToken) {
+        token.value = storedToken
+        refreshToken.value = storedRefreshToken
+
+        // Set axios default header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
+
+        // Verify token and get user data
+        await getCurrentUser()
       }
-    } catch (err) {
-      const apiError = err as ApiError
-      error.value = apiError.message
-      console.error('Login failed:', apiError)
-      throw err
+    } catch (error) {
+      console.error('Auth initialization error:', error)
+      await logout()
+    } finally {
+      isInitialized.value = true
+    }
+  }
+
+  const login = async (credentials: LoginCredentials) => {
+    isLoading.value = true
+    
+    try {
+      const response = await axios.post<AuthResponse>('/api/auth/login', credentials)
+      
+      if (response.data.success) {
+        const { token: accessToken, refreshToken: refToken, user: userData } = response.data.data
+
+        // Store tokens
+        token.value = accessToken
+        refreshToken.value = refToken
+        user.value = userData
+
+        // Persist tokens
+        localStorage.setItem('ctem_token', accessToken)
+        if (refToken) {
+          localStorage.setItem('ctem_refresh_token', refToken)
+        }
+
+        // Set axios default header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+
+        return response.data
+      } else {
+        throw new Error(response.data.message || 'Login failed')
+      }
+    } catch (error: any) {
+      console.error('Login error:', error)
+      
+      // Clear any partial state
+      await logout()
+      
+      throw error
     } finally {
       isLoading.value = false
     }
   }
 
-  async function logout() {
+  const logout = async (apiCall = true) => {
     isLoading.value = true
-    error.value = null
 
     try {
-      // Call logout endpoint to invalidate token on server
-      await apiService.logout()
-    } catch (err) {
-      // Even if logout fails on server, we should clear local data
-      console.error('Logout API call failed:', err)
+      if (apiCall && token.value) {
+        try {
+          await axios.post('/api/auth/logout', {
+            refreshToken: refreshToken.value
+          })
+        } catch (error) {
+          console.warn('Logout API call failed:', error)
+          // Continue with local logout even if API fails
+        }
+      }
     } finally {
       // Clear local state
       user.value = null
       token.value = null
       refreshToken.value = null
-      
+
       // Clear storage
-      localStorage.removeItem(import.meta.env.VITE_TOKEN_STORAGE_KEY || 'ctem_auth_token')
-      sessionStorage.removeItem(import.meta.env.VITE_TOKEN_STORAGE_KEY || 'ctem_auth_token')
-      localStorage.removeItem('ctem_user_data')
-      localStorage.removeItem(import.meta.env.VITE_REFRESH_TOKEN_STORAGE_KEY || 'ctem_refresh_token')
-      
+      localStorage.removeItem('ctem_token')
+      localStorage.removeItem('ctem_refresh_token')
+
+      // Clear axios header
+      delete axios.defaults.headers.common['Authorization']
+
       isLoading.value = false
     }
   }
 
-  async function refreshAuthToken() {
+  const getCurrentUser = async () => {
     try {
-      const response = await apiService.refreshToken()
+      const response = await axios.get('/api/auth/me')
       
-      if (response.success) {
-        token.value = response.data.token
+      if (response.data.success) {
+        user.value = response.data.data.user
+        return response.data.data.user
+      } else {
+        throw new Error('Failed to get user data')
+      }
+    } catch (error: any) {
+      console.error('Get current user error:', error)
+      
+      if (error.response?.status === 401) {
+        await refreshTokens()
+      } else {
+        throw error
+      }
+    }
+  }
+
+  const refreshTokens = async () => {
+    if (!refreshToken.value) {
+      throw new Error('No refresh token available')
+    }
+
+    try {
+      const response = await axios.post('/api/auth/refresh', {
+        refreshToken: refreshToken.value
+      })
+
+      if (response.data.success) {
+        const newToken = response.data.data.token
         
-        // Update stored token
-        const storageKey = import.meta.env.VITE_TOKEN_STORAGE_KEY || 'ctem_auth_token'
-        if (localStorage.getItem(storageKey)) {
-          localStorage.setItem(storageKey, response.data.token)
-        } else if (sessionStorage.getItem(storageKey)) {
-          sessionStorage.setItem(storageKey, response.data.token)
-        }
-        
-        return response.data.token
+        token.value = newToken
+        localStorage.setItem('ctem_token', newToken)
+        axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
+
+        // Get updated user data
+        await getCurrentUser()
+
+        return newToken
       } else {
         throw new Error('Token refresh failed')
       }
-    } catch (err) {
-      console.error('Token refresh failed:', err)
-      await logout()
-      throw err
+    } catch (error) {
+      console.error('Token refresh error:', error)
+      await logout(false) // Don't call API on refresh failure
+      throw error
     }
   }
 
-  function restoreSession() {
-    // Try to restore from localStorage first, then sessionStorage
-    const storageKey = import.meta.env.VITE_TOKEN_STORAGE_KEY || 'ctem_auth_token'
-    const storedToken = localStorage.getItem(storageKey) || sessionStorage.getItem(storageKey)
-    const storedUser = localStorage.getItem('ctem_user_data')
-    
-    if (storedToken && storedUser) {
-      try {
-        token.value = storedToken
-        user.value = JSON.parse(storedUser)
-        
-        // Verify token is still valid by making a test API call
-        // This could be done in the background
-        return true
-      } catch (err) {
-        console.error('Failed to restore session:', err)
-        clearSession()
-        return false
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    isLoading.value = true
+
+    try {
+      const response = await axios.put('/api/auth/change-password', {
+        currentPassword,
+        newPassword
+      })
+
+      if (response.data.success) {
+        return response.data
+      } else {
+        throw new Error(response.data.message || 'Password change failed')
       }
+    } finally {
+      isLoading.value = false
     }
-    
-    return false
   }
 
-  function clearSession() {
-    user.value = null
-    token.value = null
-    refreshToken.value = null
-    
-    const storageKey = import.meta.env.VITE_TOKEN_STORAGE_KEY || 'ctem_auth_token'
-    localStorage.removeItem(storageKey)
-    sessionStorage.removeItem(storageKey)
-    localStorage.removeItem('ctem_user_data')
-    localStorage.removeItem(import.meta.env.VITE_REFRESH_TOKEN_STORAGE_KEY || 'ctem_refresh_token')
+  const updateProfile = async (profileData: Partial<User>) => {
+    isLoading.value = true
+
+    try {
+      const response = await axios.put(`/api/users/${user.value?.id}`, profileData)
+
+      if (response.data.success) {
+        user.value = { ...user.value, ...response.data.data }
+        return response.data
+      } else {
+        throw new Error(response.data.message || 'Profile update failed')
+      }
+    } finally {
+      isLoading.value = false
+    }
   }
 
-  function clearError() {
-    error.value = null
-  }
+  // Setup axios interceptors for automatic token refresh
+  const setupInterceptors = () => {
+    let isRefreshing = false
+    let failedQueue: any[] = []
 
-  // Check if user has specific permission
-  function hasPermission(permission: string): boolean {
-    if (isAdmin.value) return true
-    return userPermissions.value.includes(permission)
-  }
+    const processQueue = (error: any, token: string | null = null) => {
+      failedQueue.forEach(prom => {
+        if (error) {
+          prom.reject(error)
+        } else {
+          prom.resolve(token)
+        }
+      })
+      
+      failedQueue = []
+    }
 
-  // Check if user has any of the specified permissions
-  function hasAnyPermission(permissions: string[]): boolean {
-    if (isAdmin.value) return true
-    return permissions.some(permission => userPermissions.value.includes(permission))
-  }
+    axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config
 
-  // Check if user has all of the specified permissions
-  function hasAllPermissions(permissions: string[]): boolean {
-    if (isAdmin.value) return true
-    return permissions.every(permission => userPermissions.value.includes(permission))
-  }
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          if (isRefreshing) {
+            return new Promise((resolve, reject) => {
+              failedQueue.push({ resolve, reject })
+            }).then(token => {
+              originalRequest.headers['Authorization'] = `Bearer ${token}`
+              return axios(originalRequest)
+            }).catch(err => {
+              return Promise.reject(err)
+            })
+          }
 
-  // Get user initials for avatar
-  const userInitials = computed(() => {
-    if (!user.value?.name) return ''
-    return user.value.name
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase())
-      .join('')
-      .slice(0, 2)
-  })
+          originalRequest._retry = true
+          isRefreshing = true
 
-  // Role labels for UI
-  const roleLabels = {
-    'admin': 'Administrator',
-    'analyst': 'Security Analyst',
-    'viewer': 'Viewer'
+          try {
+            const newToken = await refreshTokens()
+            processQueue(null, newToken)
+            originalRequest.headers['Authorization'] = `Bearer ${newToken}`
+            return axios(originalRequest)
+          } catch (refreshError) {
+            processQueue(refreshError, null)
+            await logout(false)
+            return Promise.reject(refreshError)
+          } finally {
+            isRefreshing = false
+          }
+        }
+
+        return Promise.reject(error)
+      }
+    )
   }
 
   return {
@@ -244,36 +315,27 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     refreshToken,
     isLoading,
-    error,
+    isInitialized,
     
-    // Getters
+    // Computed
     isAuthenticated,
-    userRole,
-    userPermissions,
+    hasRole,
+    hasPermission,
     isAdmin,
     isAnalyst,
-    canViewAssets,
-    canEditAssets,
-    canViewVulnerabilities,
-    canEditVulnerabilities,
-    canViewReports,
-    canGenerateReports,
-    canViewSettings,
+    isViewer,
     canEditSettings,
-    userInitials,
+    canManageUsers,
+    canManageSystem,
     
     // Actions
+    initializeAuth,
     login,
     logout,
-    refreshAuthToken,
-    restoreSession,
-    clearSession,
-    clearError,
-    hasPermission,
-    hasAnyPermission,
-    hasAllPermissions,
-    
-    // Constants
-    roleLabels
+    getCurrentUser,
+    refreshTokens,
+    changePassword,
+    updateProfile,
+    setupInterceptors
   }
 })

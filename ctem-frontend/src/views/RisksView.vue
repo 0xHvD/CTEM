@@ -163,7 +163,7 @@
           <div class="col-md-3">
             <select class="form-select" v-model="selectedOwner" @change="applyFilters">
               <option value="">All Owners</option>
-              <option v-for="owner in uniqueOwners" :key="owner" :value="owner">
+              <option v-for="owner in uniqueOwners" :key="String(owner)" :value="owner">
                 {{ owner }}
               </option>
             </select>
@@ -474,22 +474,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { storeToRefs } from 'pinia'
+import { ref, computed, onMounted } from 'vue'
 import type { Risk } from '@/services/api'
 
-// Mock store for now - replace with actual store when implemented
-const mockRisksStore = {
-  risks: ref<Risk[]>([
+// Type definitions
+interface RiskStats {
+  critical: number
+  high: number
+  medium: number
+  low: number
+}
+
+interface Pagination {
+  page: number
+  totalPages: number
+  total: number
+  limit: number
+}
+
+interface MockRisksStore {
+  risks: Risk[]
+  isLoading: boolean
+  error: string | null
+  pagination: Pagination
+}
+
+// Mock store data
+const mockRisksStore: MockRisksStore = {
+  risks: [
     {
       id: '1',
       title: 'SQL Injection Vulnerabilities',
       description: 'Multiple SQL injection vulnerabilities detected in web applications',
-      category: 'technical' as const,
-      likelihood: 'high' as const,
-      impact: 'high' as const,
+      category: 'technical',
+      likelihood: 'high',
+      impact: 'high',
       riskScore: 8.5,
-      status: 'identified' as const,
+      status: 'identified',
       owner: 'John Doe',
       dueDate: '2024-02-15',
       relatedAssets: ['web-server-01'],
@@ -500,37 +521,40 @@ const mockRisksStore = {
       id: '2',
       title: 'Outdated Security Patches',
       description: 'Critical security patches not applied to production servers',
-      category: 'operational' as const,
-      likelihood: 'medium' as const,
-      impact: 'high' as const,
+      category: 'operational',
+      likelihood: 'medium',
+      impact: 'high',
       riskScore: 7.2,
-      status: 'mitigating' as const,
+      status: 'mitigating',
       owner: 'Jane Smith',
       dueDate: '2024-01-30',
       relatedAssets: ['server-01', 'server-02'],
       relatedVulnerabilities: [],
       mitigationPlan: 'Schedule maintenance window for patch deployment'
     }
-  ]),
-  isLoading: ref(false),
-  error: ref<string | null>(null),
-  pagination: ref({
+  ],
+  isLoading: false,
+  error: null,
+  pagination: {
     page: 1,
     totalPages: 1,
     total: 2,
     limit: 20
-  })
+  }
 }
 
-// Using mock data - replace with actual store
-const { risks, isLoading, error, pagination } = storeToRefs(mockRisksStore)
+// Reactive data
+const risks = ref<Risk[]>(mockRisksStore.risks)
+const isLoading = ref<boolean>(mockRisksStore.isLoading)
+const error = ref<string | null>(mockRisksStore.error)
+const pagination = ref<Pagination>(mockRisksStore.pagination)
 
 // Local reactive data
-const searchTerm = ref('')
-const selectedCategory = ref('')
-const selectedStatus = ref('')
-const selectedOwner = ref('')
-const showCreateRiskModal = ref(false)
+const searchTerm = ref<string>('')
+const selectedCategory = ref<string>('')
+const selectedStatus = ref<string>('')
+const selectedOwner = ref<string>('')
+const showCreateRiskModal = ref<boolean>(false)
 const riskChartRef = ref<HTMLCanvasElement>()
 
 const newRisk = ref<Partial<Risk>>({
@@ -548,9 +572,9 @@ const newRisk = ref<Partial<Risk>>({
 })
 
 // Computed properties
-const riskStats = computed(() => {
-  const stats = { critical: 0, high: 0, medium: 0, low: 0 }
-  risks.value.forEach(risk => {
+const riskStats = computed((): RiskStats => {
+  const stats: RiskStats = { critical: 0, high: 0, medium: 0, low: 0 }
+  risks.value.forEach((risk: Risk) => {
     if (risk.riskScore >= 8) stats.critical++
     else if (risk.riskScore >= 6) stats.high++
     else if (risk.riskScore >= 4) stats.medium++
@@ -559,22 +583,24 @@ const riskStats = computed(() => {
   return stats
 })
 
-const uniqueOwners = computed(() => {
-  return [...new Set(risks.value.map(risk => risk.owner))]
+const uniqueOwners = computed((): string[] => {
+  return [...new Set(risks.value.map((risk: Risk) => risk.owner))]
+    .filter((owner): owner is string => owner !== null && owner !== undefined && owner.trim() !== '')
+    .sort()
 })
 
-const likelihoodLevels = ['Very High', 'High', 'Medium', 'Low', 'Very Low']
-const impactLevels = ['Very Low', 'Low', 'Medium', 'High', 'Very High']
+const likelihoodLevels: string[] = ['Very High', 'High', 'Medium', 'Low', 'Very Low']
+const impactLevels: string[] = ['Very Low', 'Low', 'Medium', 'High', 'Very High']
 
 // Risk matrix methods
-const getRiskCount = (likelihood: string, impact: string) => {
-  return risks.value.filter(risk => 
+const getRiskCount = (likelihood: string, impact: string): number => {
+  return risks.value.filter((risk: Risk) => 
     formatLikelihood(risk.likelihood) === likelihood && 
     formatImpact(risk.impact) === impact
   ).length
 }
 
-const getRiskMatrixClass = (likelihood: string, impact: string) => {
+const getRiskMatrixClass = (likelihood: string, impact: string): string => {
   const score = calculateMatrixScore(likelihood, impact)
   if (score >= 16) return 'risk-critical'
   if (score >= 12) return 'risk-high'
@@ -582,28 +608,28 @@ const getRiskMatrixClass = (likelihood: string, impact: string) => {
   return 'risk-low'
 }
 
-const calculateMatrixScore = (likelihood: string, impact: string) => {
+const calculateMatrixScore = (likelihood: string, impact: string): number => {
   const likelihoodScore = likelihoodLevels.indexOf(likelihood) + 1
   const impactScore = impactLevels.indexOf(impact) + 1
   return likelihoodScore * impactScore
 }
 
 // Debounced search
-let searchTimeout: NodeJS.Timeout
-const debouncedSearch = () => {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
+let searchTimeout: number | undefined
+const debouncedSearch = (): void => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = window.setTimeout(() => {
     applyFilters()
   }, 300)
 }
 
 // Methods
-const applyFilters = () => {
+const applyFilters = (): void => {
   // TODO: Implement filtering logic with store
   console.log('Apply filters:', { searchTerm: searchTerm.value, selectedCategory: selectedCategory.value })
 }
 
-const clearAllFilters = () => {
+const clearAllFilters = (): void => {
   searchTerm.value = ''
   selectedCategory.value = ''
   selectedStatus.value = ''
@@ -611,17 +637,17 @@ const clearAllFilters = () => {
   applyFilters()
 }
 
-const changePage = (page: number) => {
+const changePage = (page: number): void => {
   if (page >= 1 && page <= pagination.value.totalPages) {
     // TODO: Implement pagination with store
     console.log('Change page to:', page)
   }
 }
 
-const getVisiblePages = () => {
+const getVisiblePages = (): number[] => {
   const current = pagination.value.page
   const total = pagination.value.totalPages
-  const pages = []
+  const pages: number[] = []
   
   const start = Math.max(1, current - 2)
   const end = Math.min(total, current + 2)
@@ -633,38 +659,38 @@ const getVisiblePages = () => {
   return pages
 }
 
-const retryLoad = () => {
+const retryLoad = (): void => {
   // TODO: Implement retry logic
   console.log('Retry loading risks')
 }
 
-const selectRisk = (risk: Risk) => {
+const selectRisk = (risk: Risk): void => {
   console.log('Select risk:', risk.title)
 }
 
-const viewRiskDetails = (risk: Risk) => {
+const viewRiskDetails = (risk: Risk): void => {
   console.log('View risk details:', risk.title)
 }
 
-const editRisk = (risk: Risk) => {
+const editRisk = (risk: Risk): void => {
   console.log('Edit risk:', risk.title)
 }
 
-const updateRiskStatus = (riskId: string, status: Risk['status']) => {
+const updateRiskStatus = (riskId: string, status: Risk['status']): void => {
   console.log('Update risk status:', riskId, status)
 }
 
-const deleteRisk = (risk: Risk) => {
+const deleteRisk = (risk: Risk): void => {
   if (confirm(`Are you sure you want to delete risk "${risk.title}"?`)) {
     console.log('Delete risk:', risk.id)
   }
 }
 
-const filterByRisk = (likelihood: string, impact: string) => {
+const filterByRisk = (likelihood: string, impact: string): void => {
   console.log('Filter by risk matrix cell:', likelihood, impact)
 }
 
-const createRisk = () => {
+const createRisk = (): void => {
   console.log('Create new risk:', newRisk.value)
   showCreateRiskModal.value = false
   // Reset form
@@ -684,57 +710,57 @@ const createRisk = () => {
 }
 
 // Utility methods
-const getCategoryClass = (category: string) => {
-  const classes = {
+const getCategoryClass = (category: string): string => {
+  const classes: Record<string, string> = {
     technical: 'bg-primary',
     operational: 'bg-warning',
     compliance: 'bg-info',
     strategic: 'bg-secondary'
   }
-  return classes[category as keyof typeof classes] || 'bg-secondary'
+  return classes[category] || 'bg-secondary'
 }
 
-const getLikelihoodClass = (likelihood: string) => {
-  const classes = {
+const getLikelihoodClass = (likelihood: string): string => {
+  const classes: Record<string, string> = {
     very_low: 'bg-success',
     low: 'bg-info',
     medium: 'bg-warning',
     high: 'bg-danger',
     very_high: 'bg-danger'
   }
-  return classes[likelihood as keyof typeof classes] || 'bg-secondary'
+  return classes[likelihood] || 'bg-secondary'
 }
 
-const getImpactClass = (impact: string) => {
-  const classes = {
+const getImpactClass = (impact: string): string => {
+  const classes: Record<string, string> = {
     very_low: 'bg-success',
     low: 'bg-info',
     medium: 'bg-warning',
     high: 'bg-danger',
     very_high: 'bg-danger'
   }
-  return classes[impact as keyof typeof classes] || 'bg-secondary'
+  return classes[impact] || 'bg-secondary'
 }
 
-const getStatusClass = (status: string) => {
-  const classes = {
+const getStatusClass = (status: string): string => {
+  const classes: Record<string, string> = {
     identified: 'bg-danger',
     assessed: 'bg-warning',
     mitigating: 'bg-info',
     mitigated: 'bg-success',
     accepted: 'bg-secondary'
   }
-  return classes[status as keyof typeof classes] || 'bg-secondary'
+  return classes[status] || 'bg-secondary'
 }
 
-const getRiskScoreClass = (score: number) => {
+const getRiskScoreClass = (score: number): string => {
   if (score >= 8) return 'bg-danger'
   if (score >= 6) return 'bg-warning'
   if (score >= 4) return 'bg-info'
   return 'bg-success'
 }
 
-const getDueDateClass = (dueDate: string) => {
+const getDueDateClass = (dueDate: string): string => {
   const date = new Date(dueDate)
   const now = new Date()
   const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -744,27 +770,27 @@ const getDueDateClass = (dueDate: string) => {
   return 'text-success' // On track
 }
 
-const formatCategory = (category: string) => {
+const formatCategory = (category: string): string => {
   return category.charAt(0).toUpperCase() + category.slice(1)
 }
 
-const formatLikelihood = (likelihood: string) => {
+const formatLikelihood = (likelihood: string): string => {
   return likelihood.split('_').map(word => 
     word.charAt(0).toUpperCase() + word.slice(1)
   ).join(' ')
 }
 
-const formatImpact = (impact: string) => {
+const formatImpact = (impact: string): string => {
   return impact.split('_').map(word => 
     word.charAt(0).toUpperCase() + word.slice(1)
   ).join(' ')
 }
 
-const formatStatus = (status: string) => {
+const formatStatus = (status: string): string => {
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
-const formatDate = (dateString: string) => {
+const formatDate = (dateString: string): string => {
   const date = new Date(dateString)
   return date.toLocaleDateString('de-DE', {
     day: '2-digit',
@@ -773,7 +799,7 @@ const formatDate = (dateString: string) => {
   })
 }
 
-const truncateText = (text: string, maxLength: number) => {
+const truncateText = (text: string, maxLength: number): string => {
   if (text.length <= maxLength) return text
   return text.substring(0, maxLength) + '...'
 }

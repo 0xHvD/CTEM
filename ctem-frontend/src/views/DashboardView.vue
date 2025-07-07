@@ -392,8 +392,8 @@ const riskDistributionChart = ref<any>(null)
 const assetTrendChart = ref<any>(null)
 const riskTrendChart = ref<any>(null)
 
-// Auto-refresh interval
-const refreshInterval = ref<NodeJS.Timeout | null>(null)
+// Auto-refresh interval - Browser Timer Type
+const refreshInterval = ref<number | null>(null)
 
 // Computed properties
 const formatLastUpdated = computed(() => {
@@ -472,7 +472,7 @@ const updateCharts = () => {
 
 const setupAutoRefresh = () => {
   // Auto-refresh every 5 minutes
-  refreshInterval.value = setInterval(() => {
+  refreshInterval.value = window.setInterval(() => {
     refreshData()
   }, 5 * 60 * 1000)
 }

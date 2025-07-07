@@ -1,277 +1,262 @@
 <template>
   <div id="app">
-    <!-- Top Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-      <div class="container-fluid">
-        <router-link class="navbar-brand fw-bold" to="/">
-          <i class="bi bi-shield-check me-2"></i>
-          CTEM System
-        </router-link>
-        
-        <button 
-          class="navbar-toggler" 
-          type="button" 
-          data-bs-toggle="collapse" 
-          data-bs-target="#navbarNav"
-        >
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        
-        <div class="collapse navbar-collapse" id="navbarNav">
-          <ul class="navbar-nav me-auto">
-            <li class="nav-item">
-              <router-link class="nav-link" to="/">
-                <i class="bi bi-speedometer2 me-1"></i>Dashboard
-              </router-link>
-            </li>
-            <li class="nav-item">
-              <router-link class="nav-link" to="/assets">
-                <i class="bi bi-hdd-stack me-1"></i>Assets
-                <span v-if="assetStats && assetStats.critical > 0" class="badge bg-danger ms-1">
-                  {{ assetStats.critical }}
-                </span>
-              </router-link>
-            </li>
-            <li class="nav-item">
-              <router-link class="nav-link" to="/vulnerabilities">
-                <i class="bi bi-exclamation-triangle me-1"></i>Vulnerabilities
-                <span v-if="vulnerabilityStats && vulnerabilityStats.critical > 0" class="badge bg-danger ms-1">
-                  {{ vulnerabilityStats.critical }}
-                </span>
-              </router-link>
-            </li>
-            <li class="nav-item">
-              <router-link class="nav-link" to="/risks">
-                <i class="bi bi-graph-up-arrow me-1"></i>Risks
-              </router-link>
-            </li>
-            <li class="nav-item">
-              <router-link class="nav-link" to="/remediation">
-                <i class="bi bi-tools me-1"></i>Remediation
-              </router-link>
-            </li>
-          </ul>
-          
-          <!-- User Menu -->
-          <div class="dropdown">
-            <button 
-              class="btn btn-outline-secondary dropdown-toggle" 
-              type="button" 
-              data-bs-toggle="dropdown"
-            >
-              <i class="bi bi-person-circle me-1"></i>
-              {{ authStore.user?.name || 'User' }}
-            </button>
-            <ul class="dropdown-menu">
-              <li>
-                <router-link class="dropdown-item" to="/settings">
-                  <i class="bi bi-gear me-2"></i>Settings
-                </router-link>
-              </li>
-              <li>
-                <router-link class="dropdown-item" to="/reports">
-                  <i class="bi bi-file-earmark-text me-2"></i>Reports
-                </router-link>
-              </li>
-              <li><hr class="dropdown-divider"></li>
-              <li>
-                <a class="dropdown-item" href="#" @click.prevent="handleLogout">
-                  <i class="bi bi-box-arrow-right me-2"></i>Logout
-                </a>
-              </li>
-            </ul>
-          </div>
+    <!-- Loading Screen during auth initialization -->
+    <div v-if="!authStore.isInitialized" class="loading-screen">
+      <div class="d-flex flex-column align-items-center justify-content-center min-vh-100">
+        <div class="mb-4">
+          <i class="bi bi-shield-check text-primary" style="font-size: 4rem;"></i>
         </div>
+        <div class="spinner-border text-primary mb-3" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <h4 class="text-muted">Initializing CTEM Platform...</h4>
       </div>
-    </nav>
+    </div>
 
-    <!-- Main Content -->
-    <div class="container-fluid">
-      <div class="row">
-        <!-- Sidebar für zusätzliche Navigation -->
-        <nav class="col-md-2 d-none d-md-block sidebar p-0">
-          <div class="position-sticky pt-3">
-            <ul class="nav flex-column">
-              <li class="nav-item">
-                <router-link 
-                  class="nav-link text-white" 
-                  :class="{ active: $route.name === 'compliance' }"
-                  to="/compliance"
-                >
-                  <i class="bi bi-clipboard-check me-2"></i>
-                  Compliance
-                </router-link>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link text-white" href="#" @click.prevent="showNotifications">
-                  <i class="bi bi-bell me-2"></i>
-                  Notifications
-                  <span 
-                    v-if="notificationsStore.unreadCount > 0" 
-                    class="badge bg-danger ms-auto"
-                  >
-                    {{ notificationsStore.unreadCount }}
-                  </span>
-                </a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link text-white" href="#">
-                  <i class="bi bi-clock-history me-2"></i>
-                  Audit Log
-                </a>
-              </li>
-            </ul>
+    <!-- Public Layout (Home, Login) -->
+    <template v-else-if="isPublicRoute">
+      <router-view />
+    </template>
 
-            <!-- Mini Stats in Sidebar -->
-            <div class="mt-4 px-3">
-              <div class="card bg-dark border-secondary">
-                <div class="card-body p-3">
-                  <h6 class="card-title text-white mb-2">Quick Stats</h6>
-                  <div class="d-flex justify-content-between text-white mb-1">
-                    <small>Assets:</small>
-                    <small class="fw-bold">{{ dashboardStore.stats.totalAssets }}</small>
-                  </div>
-                  <div class="d-flex justify-content-between text-white mb-1">
-                    <small>Critical Vulns:</small>
-                    <small class="fw-bold text-danger">{{ dashboardStore.stats.criticalVulnerabilities }}</small>
-                  </div>
-                  <div class="d-flex justify-content-between text-white">
-                    <small>Risk Score:</small>
-                    <small class="fw-bold" :class="getRiskScoreClass(dashboardStore.stats.averageRiskScore)">
-                      {{ dashboardStore.stats.averageRiskScore.toFixed(1) }}
-                    </small>
-                  </div>
+    <!-- Authenticated Layout (Dashboard, etc.) -->
+    <template v-else-if="authStore.isAuthenticated">
+      <div class="authenticated-layout">
+        <!-- Navigation Header -->
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+          <div class="container-fluid">
+            <router-link class="navbar-brand d-flex align-items-center" to="/dashboard">
+              <i class="bi bi-shield-check me-2"></i>
+              CTEM Platform
+            </router-link>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+              <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                  <router-link class="nav-link" to="/dashboard" active-class="active">
+                    <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                  </router-link>
+                </li>
+                <li class="nav-item">
+                  <router-link class="nav-link" to="/assets" active-class="active">
+                    <i class="bi bi-hdd-stack me-1"></i>Assets
+                  </router-link>
+                </li>
+                <li class="nav-item">
+                  <router-link class="nav-link" to="/vulnerabilities" active-class="active">
+                    <i class="bi bi-exclamation-triangle me-1"></i>Vulnerabilities
+                  </router-link>
+                </li>
+                <li class="nav-item">
+                  <router-link class="nav-link" to="/risks" active-class="active">
+                    <i class="bi bi-shield-exclamation me-1"></i>Risks
+                  </router-link>
+                </li>
+                <li class="nav-item">
+                  <router-link class="nav-link" to="/remediation" active-class="active">
+                    <i class="bi bi-tools me-1"></i>Remediation
+                  </router-link>
+                </li>
+                <li class="nav-item">
+                  <router-link class="nav-link" to="/compliance" active-class="active">
+                    <i class="bi bi-patch-check me-1"></i>Compliance
+                  </router-link>
+                </li>
+                <li class="nav-item">
+                  <router-link class="nav-link" to="/reports" active-class="active">
+                    <i class="bi bi-file-earmark-text me-1"></i>Reports
+                  </router-link>
+                </li>
+                <li class="nav-item" v-if="authStore.isAdmin">
+                  <router-link class="nav-link" to="/settings" active-class="active">
+                    <i class="bi bi-gear me-1"></i>Settings
+                  </router-link>
+                </li>
+              </ul>
+
+              <!-- User Menu -->
+              <div class="navbar-nav">
+                <div class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
+                    <div class="user-avatar me-2">
+                      <i class="bi bi-person-circle"></i>
+                    </div>
+                    <span class="d-none d-md-inline">{{ authStore.user?.name }}</span>
+                  </a>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                      <div class="dropdown-header">
+                        <div class="fw-bold">{{ authStore.user?.name }}</div>
+                        <small class="text-muted">{{ authStore.user?.email }}</small>
+                        <small class="badge bg-primary">{{ authStore.user?.role }}</small>
+                      </div>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <a class="dropdown-item" href="#" @click="showProfileModal = true">
+                        <i class="bi bi-person me-2"></i>Profile
+                      </a>
+                    </li>
+                    <li>
+                      <a class="dropdown-item" href="#" @click="showChangePasswordModal = true">
+                        <i class="bi bi-key me-2"></i>Change Password
+                      </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <a class="dropdown-item text-danger" href="#" @click="handleLogout">
+                        <i class="bi bi-box-arrow-right me-2"></i>Sign Out
+                      </a>
+                    </li>
+                  </ul>
                 </div>
               </div>
             </div>
           </div>
         </nav>
 
-        <!-- Page Content -->
-        <main class="col-md-10 ms-sm-auto px-md-4">
-          <!-- Loading Overlay -->
-          <div v-if="isGlobalLoading" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(0,0,0,0.5); z-index: 9999;">
-            <div class="spinner-border text-primary" role="status">
-              <span class="visually-hidden">Loading...</span>
-            </div>
+        <!-- Main Content Area -->
+        <main class="main-content">
+          <div class="container-fluid">
+            <router-view />
           </div>
-
-          <!-- Critical Alerts Banner -->
-          <div v-if="notificationsStore.criticalNotifications.length > 0" class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <strong>Critical Alert:</strong> 
-            {{ notificationsStore.criticalNotifications[0].message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-          </div>
-
-          <router-view />
         </main>
       </div>
-    </div>
+    </template>
 
-    <!-- Notifications Modal -->
-    <div class="modal fade" id="notificationsModal" tabindex="-1">
-      <div class="modal-dialog modal-lg">
+    <!-- Fallback: Redirect to login if not authenticated -->
+    <template v-else>
+      <div class="d-flex align-items-center justify-content-center min-vh-100">
+        <div class="text-center">
+          <i class="bi bi-shield-x text-warning mb-3" style="font-size: 3rem;"></i>
+          <h4>Access Restricted</h4>
+          <p class="text-muted">Please log in to access the CTEM platform.</p>
+          <router-link to="/login" class="btn btn-primary">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Go to Login
+          </router-link>
+        </div>
+      </div>
+    </template>
+
+    <!-- Profile Modal -->
+    <div v-if="showProfileModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+      <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">
-              <i class="bi bi-bell me-2"></i>Notifications
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <h5 class="modal-title">User Profile</h5>
+            <button type="button" class="btn-close" @click="showProfileModal = false"></button>
           </div>
           <div class="modal-body">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <span class="text-muted">{{ notificationsStore.notifications.length }} notifications</span>
-              <button 
-                v-if="notificationsStore.unreadCount > 0"
-                @click="notificationsStore.markAllAsRead()"
-                class="btn btn-sm btn-outline-primary"
-              >
-                Mark all as read
-              </button>
-            </div>
-            
-            <div class="list-group">
-              <div 
-                v-for="notification in notificationsStore.recentNotifications" 
-                :key="notification.id"
-                class="list-group-item"
-                :class="{ 'list-group-item-light': notification.read }"
-              >
-                <div class="d-flex w-100 justify-content-between">
-                  <h6 class="mb-1">
-                    <i :class="getNotificationIcon(notification.type)" class="me-2"></i>
-                    {{ notification.title }}
-                  </h6>
-                  <small class="text-muted">{{ formatTimeAgo(notification.timestamp) }}</small>
-                </div>
-                <p class="mb-1">{{ notification.message }}</p>
-                <div class="d-flex justify-content-between align-items-center">
-                  <span 
-                    class="badge"
-                    :class="getSeverityBadgeClass(notification.severity)"
-                  >
-                    {{ notification.severity }}
-                  </span>
-                  <div>
-                    <button 
-                      v-if="!notification.read"
-                      @click="notificationsStore.markAsRead(notification.id)"
-                      class="btn btn-sm btn-outline-secondary me-2"
-                    >
-                      Mark as read
-                    </button>
-                    <router-link 
-                      v-if="notification.actionUrl"
-                      :to="notification.actionUrl"
-                      class="btn btn-sm btn-primary"
-                      data-bs-dismiss="modal"
-                    >
-                      View
-                    </router-link>
-                  </div>
-                </div>
+            <form @submit.prevent="updateProfile">
+              <div class="mb-3">
+                <label for="profileName" class="form-label">Name</label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  id="profileName"
+                  v-model="profileForm.name"
+                >
               </div>
-            </div>
-            
-            <!-- Empty state -->
-            <div v-if="notificationsStore.notifications.length === 0" class="text-center py-4">
-              <i class="bi bi-bell-slash text-muted" style="font-size: 3rem;"></i>
-              <p class="text-muted mt-2">No notifications yet</p>
-            </div>
+              <div class="mb-3">
+                <label for="profileEmail" class="form-label">Email</label>
+                <input 
+                  type="email" 
+                  class="form-control" 
+                  id="profileEmail"
+                  v-model="profileForm.email"
+                  disabled
+                >
+                <div class="form-text">Email cannot be changed. Contact your administrator.</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Role</label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  :value="authStore.user?.role"
+                  disabled
+                >
+              </div>
+            </form>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-              Close
+            <button type="button" class="btn btn-secondary" @click="showProfileModal = false">Cancel</button>
+            <button type="button" class="btn btn-primary" @click="updateProfile" :disabled="isUpdatingProfile">
+              <span v-if="isUpdatingProfile" class="spinner-border spinner-border-sm me-2"></span>
+              Save Changes
             </button>
-            <router-link to="/notifications" class="btn btn-primary" data-bs-dismiss="modal">
-              View All Notifications
-            </router-link>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Toast Container for Quick Notifications -->
+    <!-- Change Password Modal -->
+    <div v-if="showChangePasswordModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Change Password</h5>
+            <button type="button" class="btn-close" @click="showChangePasswordModal = false"></button>
+          </div>
+          <div class="modal-body">
+            <form @submit.prevent="changePassword">
+              <div class="mb-3">
+                <label for="currentPassword" class="form-label">Current Password</label>
+                <input 
+                  type="password" 
+                  class="form-control" 
+                  id="currentPassword"
+                  v-model="passwordForm.currentPassword"
+                  required
+                >
+              </div>
+              <div class="mb-3">
+                <label for="newPassword" class="form-label">New Password</label>
+                <input 
+                  type="password" 
+                  class="form-control" 
+                  id="newPassword"
+                  v-model="passwordForm.newPassword"
+                  minlength="8"
+                  required
+                >
+              </div>
+              <div class="mb-3">
+                <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                <input 
+                  type="password" 
+                  class="form-control" 
+                  id="confirmPassword"
+                  v-model="passwordForm.confirmPassword"
+                  required
+                >
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showChangePasswordModal = false">Cancel</button>
+            <button type="button" class="btn btn-primary" @click="changePassword" :disabled="isChangingPassword || !isPasswordFormValid">
+              <span v-if="isChangingPassword" class="spinner-border spinner-border-sm me-2"></span>
+              Change Password
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
-      <div 
-        v-for="toast in activeToasts" 
-        :key="toast.id"
-        class="toast show"
-        role="alert"
-      >
+      <div v-if="notification.show" class="toast show" role="alert">
         <div class="toast-header">
-          <i :class="getNotificationIcon(toast.type)" class="me-2"></i>
-          <strong class="me-auto">{{ toast.title }}</strong>
-          <small class="text-muted">now</small>
-          <button 
-            type="button" 
-            class="btn-close" 
-            @click="dismissToast(toast.id)"
-          ></button>
+          <i :class="notification.type === 'success' ? 'bi bi-check-circle text-success' : 'bi bi-exclamation-triangle text-danger'" class="me-2"></i>
+          <strong class="me-auto">{{ notification.type === 'success' ? 'Success' : 'Error' }}</strong>
+          <button type="button" class="btn-close" @click="notification.show = false"></button>
         </div>
         <div class="toast-body">
-          {{ toast.message }}
+          {{ notification.message }}
         </div>
       </div>
     </div>
@@ -279,356 +264,249 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useDashboardStore } from '@/stores/dashboard'
-import { useVulnerabilitiesStore } from '@/stores/vulnerabilities'
-import { useAssetsStore } from '@/stores/assets'
-import { useNotificationsStore } from '@/stores/notifications'
 
+// Router
+const route = useRoute()
 const router = useRouter()
 
-// Store instances
+// Stores
 const authStore = useAuthStore()
-const dashboardStore = useDashboardStore()
-const vulnerabilitiesStore = useVulnerabilitiesStore()
-const assetsStore = useAssetsStore()
-const notificationsStore = useNotificationsStore()
 
-// Local state for toasts
-const activeToasts = ref<Array<{
-  id: string
-  title: string
-  message: string
-  type: string
-}>>([])
+// Local state
+const showProfileModal = ref(false)
+const showChangePasswordModal = ref(false)
+const isUpdatingProfile = ref(false)
+const isChangingPassword = ref(false)
 
-// Computed properties for stats
-const assetStats = computed(() => assetsStore.assetStats)
-const vulnerabilityStats = computed(() => vulnerabilitiesStore.vulnerabilityStats)
+const notification = ref({
+  show: false,
+  type: 'success' as 'success' | 'error',
+  message: ''
+})
+
+const profileForm = ref({
+  name: '',
+  email: ''
+})
+
+const passwordForm = ref({
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
 
 // Computed
-const isGlobalLoading = computed(() => 
-  dashboardStore.isLoading || 
-  vulnerabilitiesStore.isLoading || 
-  assetsStore.isLoading
-)
+const isPublicRoute = computed(() => {
+  const publicRoutes = ['home', 'login']
+  return publicRoutes.includes(route.name as string)
+})
+
+const isPasswordFormValid = computed(() => {
+  return passwordForm.value.currentPassword.length >= 8 &&
+         passwordForm.value.newPassword.length >= 8 &&
+         passwordForm.value.newPassword === passwordForm.value.confirmPassword
+})
 
 // Methods
-const handleLogout = async () => {
-  try {
-    authStore.logout()
-    await router.push('/login')
-  } catch (error) {
-    console.error('Logout failed:', error)
-  }
-}
-
-const showNotifications = () => {
-  // Bootstrap Modal programmatically
-  const modal = new (window as any).bootstrap.Modal(document.getElementById('notificationsModal'))
-  modal.show()
-}
-
-const getRiskScoreClass = (score: number): string => {
-  if (score >= 8) return 'text-danger'
-  if (score >= 5) return 'text-warning'
-  return 'text-success'
-}
-
-const getNotificationIcon = (type: string): string => {
-  const icons = {
-    vulnerability: 'bi bi-exclamation-triangle-fill text-danger',
-    asset: 'bi bi-hdd-stack text-info',
-    compliance: 'bi bi-clipboard-check text-success',
-    system: 'bi bi-gear text-secondary',
-    error: 'bi bi-x-circle-fill text-danger',
-    warning: 'bi bi-exclamation-triangle-fill text-warning',
-    info: 'bi bi-info-circle-fill text-info',
-    success: 'bi bi-check-circle-fill text-success'
-  }
-  return icons[type as keyof typeof icons] || 'bi bi-info-circle'
-}
-
-const getSeverityBadgeClass = (severity: string): string => {
-  const classes = {
-    error: 'bg-danger',
-    warning: 'bg-warning text-dark',
-    success: 'bg-success',
-    info: 'bg-info text-dark',
-    critical: 'bg-danger',
-    high: 'bg-warning text-dark',
-    medium: 'bg-primary',
-    low: 'bg-secondary'
-  }
-  return classes[severity as keyof typeof classes] || 'bg-secondary'
-}
-
-const formatTimeAgo = (date: Date): string => {
-  const now = new Date()
-  const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
-  
-  if (diffInMinutes < 1) return 'Just now'
-  if (diffInMinutes < 60) return `${diffInMinutes}m ago`
-  
-  const diffInHours = Math.floor(diffInMinutes / 60)
-  if (diffInHours < 24) return `${diffInHours}h ago`
-  
-  const diffInDays = Math.floor(diffInHours / 24)
-  if (diffInDays < 7) return `${diffInDays}d ago`
-  
-  const diffInWeeks = Math.floor(diffInDays / 7)
-  return `${diffInWeeks}w ago`
-}
-
-const dismissToast = (toastId: string) => {
-  const index = activeToasts.value.findIndex(toast => toast.id === toastId)
-  if (index > -1) {
-    activeToasts.value.splice(index, 1)
-  }
-}
-
-const showToast = (notification: any) => {
-  const toast = {
-    id: `toast-${Date.now()}`,
-    title: notification.title,
-    message: notification.message,
-    type: notification.type || notification.severity
-  }
-  
-  activeToasts.value.push(toast)
-  
-  // Auto-dismiss after 5 seconds
+const showNotification = (type: 'success' | 'error', message: string) => {
+  notification.value = { show: true, type, message }
   setTimeout(() => {
-    dismissToast(toast.id)
+    notification.value.show = false
   }, 5000)
 }
 
-// Lifecycle
-onMounted(async () => {
-  // Initial data fetch - using correct store methods
-  try {
-    await Promise.all([
-      dashboardStore.fetchDashboardStats(), // Changed from fetchMetrics()
-      vulnerabilitiesStore.fetchVulnerabilities(),
-      assetsStore.fetchAssets()
-      // Note: notificationsStore doesn't have fetchNotifications method based on the store
-    ])
-  } catch (error) {
-    console.error('Failed to load initial data:', error)
-    
-    // Show error toast
-    showToast({
-      title: 'Loading Error',
-      message: 'Failed to load some data. Please refresh the page.',
-      type: 'error'
-    })
+const handleLogout = async () => {
+  if (confirm('Are you sure you want to sign out?')) {
+    try {
+      await authStore.logout()
+      router.push('/login?message=logged_out')
+    } catch (error) {
+      console.error('Logout error:', error)
+      showNotification('error', 'Failed to sign out')
+    }
+  }
+}
+
+const updateProfile = async () => {
+  if (!profileForm.value.name.trim()) {
+    showNotification('error', 'Name is required')
+    return
   }
 
-  // Setup periodic data refresh (every 5 minutes)
-  setInterval(async () => {
-    try {
-      await Promise.all([
-        dashboardStore.fetchDashboardStats() // Changed from fetchMetrics()
-      ])
-    } catch (error) {
-      console.warn('Background refresh failed:', error)
+  isUpdatingProfile.value = true
+  try {
+    await authStore.updateProfile({
+      name: profileForm.value.name.trim()
+    })
+    
+    showProfileModal.value = false
+    showNotification('success', 'Profile updated successfully')
+  } catch (error: any) {
+    showNotification('error', error.message || 'Failed to update profile')
+  } finally {
+    isUpdatingProfile.value = false
+  }
+}
+
+const changePassword = async () => {
+  if (!isPasswordFormValid.value) {
+    showNotification('error', 'Please check your password requirements')
+    return
+  }
+
+  isChangingPassword.value = true
+  try {
+    await authStore.changePassword(
+      passwordForm.value.currentPassword,
+      passwordForm.value.newPassword
+    )
+    
+    showChangePasswordModal.value = false
+    passwordForm.value = {
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
     }
-  }, 5 * 60 * 1000)
+    showNotification('success', 'Password changed successfully')
+  } catch (error: any) {
+    showNotification('error', error.message || 'Failed to change password')
+  } finally {
+    isChangingPassword.value = false
+  }
+}
+
+const initializeProfileForm = () => {
+  if (authStore.user) {
+    profileForm.value = {
+      name: authStore.user.name,
+      email: authStore.user.email
+    }
+  }
+}
+
+// Watchers
+watch(() => authStore.user, initializeProfileForm, { immediate: true })
+
+watch(() => showProfileModal.value, (show) => {
+  if (show) {
+    initializeProfileForm()
+  }
 })
 
-// Watch for new critical notifications and show toasts
-import { watch } from 'vue'
-watch(
-  () => notificationsStore.criticalNotifications,
-  (newCriticalNotifications, oldCriticalNotifications) => {
-    // Show toast for new critical notifications
-    if (newCriticalNotifications.length > (oldCriticalNotifications?.length || 0)) {
-      const newNotification = newCriticalNotifications[0]
-      if (newNotification && !newNotification.read) {
-        showToast(newNotification)
-      }
+watch(() => showChangePasswordModal.value, (show) => {
+  if (!show) {
+    passwordForm.value = {
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
     }
-  },
-  { deep: true }
-)
+  }
+})
+
+// Lifecycle
+onMounted(async () => {
+  // Initialize auth store
+  await authStore.initializeAuth()
+  
+  // Setup axios interceptors
+  authStore.setupInterceptors()
+})
 </script>
 
 <style scoped>
-:root {
-  --ctem-primary: #667eea;
-  --ctem-secondary: #764ba2;
-  --ctem-danger: #dc3545;
-  --ctem-warning: #ffc107;
-  --ctem-success: #28a745;
-  --ctem-info: #17a2b8;
+.loading-screen {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
 }
 
-.router-link-active {
-  color: var(--ctem-primary) !important;
-  font-weight: 600;
+.authenticated-layout {
+  min-height: 100vh;
+  padding-top: 76px; /* Account for fixed navbar */
 }
 
-.sidebar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  min-height: calc(100vh - 56px);
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
-}
-
-.sidebar .nav-link {
-  transition: all 0.3s ease;
-  border-radius: 0.375rem;
-  margin: 0.125rem 0.75rem;
-  padding: 0.75rem 1rem;
-}
-
-.sidebar .nav-link:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
-}
-
-.sidebar .nav-link.active {
-  background-color: rgba(255, 255, 255, 0.2);
-  font-weight: 600;
-  border-left: 4px solid white;
-}
-
-.navbar {
-  border-bottom: 1px solid #e9ecef;
-  backdrop-filter: blur(10px);
-  background-color: rgba(255, 255, 255, 0.95) !important;
+.main-content {
+  padding: 2rem 0;
 }
 
 .navbar-brand {
-  color: var(--ctem-primary) !important;
-  font-size: 1.5rem;
-  text-decoration: none;
-}
-
-.navbar-brand:hover {
-  color: var(--ctem-secondary) !important;
+  font-weight: 700;
+  font-size: 1.25rem;
 }
 
 .nav-link {
-  transition: color 0.3s ease;
+  transition: all 0.3s ease;
+  border-radius: 0.375rem;
+  margin: 0 0.25rem;
 }
 
 .nav-link:hover {
-  color: var(--ctem-primary) !important;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
-.badge {
-  font-size: 0.7rem;
-  padding: 0.25rem 0.5rem;
+.nav-link.active {
+  background-color: rgba(255, 255, 255, 0.2);
+  font-weight: 600;
 }
 
-.card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+.user-avatar i {
+  font-size: 1.5rem;
 }
 
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+.dropdown-header {
+  padding: 0.75rem 1rem;
 }
 
-.alert {
-  border: none;
-  border-radius: 0.5rem;
+.dropdown-item {
+  transition: all 0.2s ease;
 }
 
-.modal-content {
-  border: none;
-  border-radius: 1rem;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+.dropdown-item:hover {
+  background-color: rgba(0, 123, 255, 0.1);
 }
 
-.modal-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 1rem 1rem 0 0;
+.modal.show {
+  display: block !important;
 }
 
-.list-group-item {
-  border: none;
-  border-bottom: 1px solid #e9ecef;
-  transition: background-color 0.2s ease;
-}
-
-.list-group-item:hover {
-  background-color: #f8f9fa;
-}
-
-.list-group-item:last-child {
-  border-bottom: none;
+.toast-container {
+  z-index: 1100;
 }
 
 .toast {
-  min-width: 350px;
+  min-width: 300px;
 }
 
-.toast-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-bottom: none;
+@media (max-width: 768px) {
+  .main-content {
+    padding: 1rem 0;
+  }
+  
+  .navbar-nav .nav-link {
+    margin: 0.25rem 0;
+  }
+  
+  .d-none.d-md-inline {
+    display: none !important;
+  }
 }
 
-.spinner-border {
-  width: 3rem;
-  height: 3rem;
-}
-
-/* Custom scrollbar for sidebar */
-.sidebar::-webkit-scrollbar {
+/* Custom scrollbar for sidebar if needed */
+::-webkit-scrollbar {
   width: 6px;
 }
 
-.sidebar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
 }
 
-.sidebar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
   border-radius: 3px;
 }
 
-.sidebar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .sidebar {
-    min-height: auto;
-  }
-  
-  .navbar-brand {
-    font-size: 1.25rem;
-  }
-  
-  .toast {
-    min-width: 300px;
-  }
-}
-
-/* Animation for loading overlay */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.position-fixed {
-  animation: fadeIn 0.3s ease;
-}
-
-/* Notification badges pulse animation */
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
-}
-
-.badge.bg-danger {
-  animation: pulse 2s infinite;
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 </style>

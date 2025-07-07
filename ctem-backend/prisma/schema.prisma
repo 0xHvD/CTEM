@@ -1,0 +1,500 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  password        String
+  name            String
+  role            Role     @default(VIEWER)
+  permissions     String[] @default([])
+  isActive        Boolean  @default(true)
+  avatar          String?
+  department      String?
+  phoneNumber     String?
+  mfaEnabled      Boolean  @default(false)
+  lastLogin       DateTime?
+  passwordLastChanged DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  refreshTokens   RefreshToken[]
+  createdAssets   Asset[]        @relation("AssetCreatedBy")
+  createdRisks    Risk[]         @relation("RiskCreatedBy")
+  riskOwned       Risk[]         @relation("RiskOwner")
+  riskUpdated     Risk[]         @relation("RiskUpdatedBy")
+  createdReports  Report[]       @relation("ReportCreatedBy")
+  notifications   Notification[]
+  notificationSettings UserNotificationSettings?
+  auditLogs       AuditLog[]
+  systemSettingsCreated  SystemSetting[] @relation("SystemSettingCreatedBy")
+  systemSettingsUpdated SystemSetting[] @relation("SystemSettingUpdatedBy")
+  complianceFrameworksCreated ComplianceFramework[] @relation("ComplianceFrameworkCreatedBy")
+  complianceControlsAssessed ComplianceControl[] @relation("ComplianceControlAssessedBy")
+  scanResultsCreated ScanResult[] @relation("ScanResultCreatedBy")
+  scheduledScansCreated ScheduledScan[] @relation("ScheduledScanCreatedBy")
+  systemBackupsCreated SystemBackup[] @relation("SystemBackupCreatedBy")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+enum Role {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+model Asset {
+  id                String   @id @default(uuid())
+  name              String
+  type              AssetType
+  status            AssetStatus @default(ACTIVE)
+  criticality       Criticality @default(MEDIUM)
+  ipAddress         String?
+  hostname          String?
+  operatingSystem   String?
+  lastSeen          DateTime @default(now())
+  owner             String?
+  tags              String[] @default([])
+  riskScore         Float    @default(0)
+  vulnerabilityCount Int     @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdById       String
+
+  // Relations
+  createdBy         User @relation("AssetCreatedBy", fields: [createdById], references: [id])
+  vulnerabilities   AssetVulnerability[]
+  relatedRisks      Risk[] @relation("RiskAssets")
+  scanResults       ScanResult[]
+
+  @@map("assets")
+}
+
+enum AssetType {
+  SERVER
+  WORKSTATION
+  NETWORK_DEVICE
+  APPLICATION
+  DATABASE
+  CLOUD_RESOURCE
+}
+
+enum AssetStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum Criticality {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model Vulnerability {
+  id                String   @id @default(uuid())
+  cveId             String?  @unique
+  title             String
+  description       String
+  severity          Severity
+  cvssScore         Float
+  cvssVector        String?
+  publishedDate     DateTime
+  lastModifiedDate  DateTime
+  category          String
+  solution          String?
+  references        String[] @default([])
+  exploitAvailable  Boolean  @default(false)
+  patchAvailable    Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  affectedAssets    AssetVulnerability[]
+  relatedRisks      Risk[] @relation("RiskVulnerabilities")
+
+  @@map("vulnerabilities")
+}
+
+model AssetVulnerability {
+  id              String   @id @default(uuid())
+  assetId         String
+  vulnerabilityId String
+  status          VulnerabilityStatus @default(OPEN)
+  detectedAt      DateTime @default(now())
+  resolvedAt      DateTime?
+  notes           String?
+
+  // Relations
+  asset           Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  vulnerability   Vulnerability @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, vulnerabilityId])
+  @@map("asset_vulnerabilities")
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum VulnerabilityStatus {
+  OPEN
+  INVESTIGATING
+  MITIGATED
+  FALSE_POSITIVE
+  RISK_ACCEPTED
+}
+
+model Risk {
+  id                    String   @id @default(uuid())
+  title                 String
+  description           String
+  category              RiskCategory
+  likelihood            RiskLevel
+  impact                RiskLevel
+  riskScore             Float
+  status                RiskStatus @default(IDENTIFIED)
+  ownerName             String?
+  ownerId               String?
+  dueDate               DateTime?
+  mitigationPlan        String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  createdById           String
+  updatedById           String?
+
+  // Relations
+  createdBy             User @relation("RiskCreatedBy", fields: [createdById], references: [id])
+  updatedBy             User? @relation("RiskUpdatedBy", fields: [updatedById], references: [id])
+  owner                 User? @relation("RiskOwner", fields: [ownerId], references: [id])
+  relatedAssets         Asset[] @relation("RiskAssets")
+  relatedVulnerabilities Vulnerability[] @relation("RiskVulnerabilities")
+
+  @@map("risks")
+}
+
+enum RiskCategory {
+  TECHNICAL
+  OPERATIONAL
+  COMPLIANCE
+  STRATEGIC
+}
+
+enum RiskLevel {
+  VERY_LOW
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+}
+
+enum RiskStatus {
+  IDENTIFIED
+  ASSESSED
+  MITIGATING
+  MITIGATED
+  ACCEPTED
+}
+
+model ComplianceFramework {
+  id              String   @id @default(uuid())
+  name            String
+  version         String
+  description     String?
+  status          FrameworkStatus @default(ACTIVE)
+  complianceScore Float    @default(0)
+  lastAssessedAt  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdById     String
+
+  // Relations
+  createdBy       User @relation("ComplianceFrameworkCreatedBy", fields: [createdById], references: [id])
+  controls        ComplianceControl[]
+
+  @@unique([name, version])
+  @@map("compliance_frameworks")
+}
+
+model ComplianceControl {
+  id              String   @id @default(uuid())
+  frameworkId     String
+  controlId       String
+  title           String
+  description     String
+  category        String
+  status          ControlStatus @default(NOT_IMPLEMENTED)
+  lastAssessedAt  DateTime?
+  evidence        String[] @default([])
+  notes           String?
+  assessedById    String?
+
+  // Relations
+  framework       ComplianceFramework @relation(fields: [frameworkId], references: [id], onDelete: Cascade)
+  assessedBy      User? @relation("ComplianceControlAssessedBy", fields: [assessedById], references: [id])
+
+  @@unique([frameworkId, controlId])
+  @@map("compliance_controls")
+}
+
+enum FrameworkStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ControlStatus {
+  IMPLEMENTED
+  PARTIAL
+  NOT_IMPLEMENTED
+}
+
+model Report {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  type          ReportType
+  status        ReportStatus @default(PENDING)
+  format        ReportFormat @default(PDF)
+  parameters    Json?
+  recipients    String[] @default([])
+  schedule      Json?
+  size          Int?
+  downloadUrl   String?
+  error         String?
+  createdAt     DateTime @default(now())
+  completedAt   DateTime?
+  createdById   String
+
+  // Relations
+  createdBy     User @relation("ReportCreatedBy", fields: [createdById], references: [id])
+
+  @@map("reports")
+}
+
+enum ReportType {
+  ASSETS
+  VULNERABILITIES
+  RISKS
+  COMPLIANCE
+}
+
+enum ReportStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+  SCHEDULED
+}
+
+enum ReportFormat {
+  PDF
+  EXCEL
+  CSV
+  HTML
+}
+
+model ScanResult {
+  id                    String   @id @default(uuid())
+  scanType              ScanType
+  status                ScanStatus @default(PENDING)
+  startedAt             DateTime?
+  completedAt           DateTime?
+  duration              Int?
+  findingsCount         Int      @default(0)
+  assetsScanned         Int      @default(0)
+  vulnerabilitiesFound  Int      @default(0)
+  criticalFindings      Int      @default(0)
+  highFindings          Int      @default(0)
+  mediumFindings        Int      @default(0)
+  lowFindings           Int      @default(0)
+  configuration         Json?
+  findings              Json?
+  error                 String?
+  createdAt             DateTime @default(now())
+  createdById           String
+  assetId               String?
+
+  // Relations
+  createdBy             User @relation("ScanResultCreatedBy", fields: [createdById], references: [id])
+  asset                 Asset? @relation(fields: [assetId], references: [id])
+
+  @@map("scan_results")
+}
+
+model ScheduledScan {
+  id            String   @id @default(uuid())
+  name          String
+  scanType      ScanType
+  enabled       Boolean  @default(true)
+  frequency     String
+  time          String
+  dayOfWeek     Int?
+  dayOfMonth    Int?
+  configuration Json?
+  lastRun       DateTime?
+  nextRun       DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String
+
+  // Relations
+  createdBy     User @relation("ScheduledScanCreatedBy", fields: [createdById], references: [id])
+
+  @@map("scheduled_scans")
+}
+
+enum ScanType {
+  NETWORK
+  VULNERABILITY
+  COMPLIANCE
+  FULL
+}
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?
+  priority    Priority @default(MEDIUM)
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  userId      String
+  category    String?
+  actionUrl   String?
+  actionText  String?
+
+  // Relations
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model UserNotificationSettings {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  settings  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_settings")
+}
+
+enum NotificationType {
+  ALERT
+  INFO
+  WARNING
+  SUCCESS
+  SYSTEM
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  category    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  updatedById String?
+
+  // Relations
+  createdBy   User @relation("SystemSettingCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User? @relation("SystemSettingUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("system_settings")
+}
+
+model SystemBackup {
+  id          String   @id @default(uuid())
+  status      BackupStatus @default(IN_PROGRESS)
+  type        BackupType
+  location    String?
+  size        Int?
+  error       String?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  createdById String
+
+  // Relations
+  createdBy   User @relation("SystemBackupCreatedBy", fields: [createdById], references: [id])
+
+  @@map("system_backups")
+}
+
+enum BackupStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum BackupType {
+  FULL
+  INCREMENTAL
+  DIFFERENTIAL
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  entityType  String
+  entityId    String?
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  userId      String?
+
+  // Relations
+  user        User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
