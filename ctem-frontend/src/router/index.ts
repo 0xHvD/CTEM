@@ -28,49 +28,49 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: DashboardView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/assets',
       name: 'assets',
       component: () => import('../views/AssetsView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/vulnerabilities',
       name: 'vulnerabilities', 
       component: () => import('../views/VulnerabilitiesView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/risks',
       name: 'risks',
       component: () => import('../views/RisksView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/remediation',
       name: 'remediation',
       component: () => import('../views/RemediationView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/compliance',
       name: 'compliance',
       component: () => import('../views/ComplianceView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/reports',
       name: 'reports',
       component: () => import('../views/ReportsView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/settings',
       name: 'settings',
       component: () => import('../views/SettingsView.vue'),
-      meta: { requiresAuth: true, requiresRole: ['ADMIN'] }
+      meta: { requiresAuth: false, requiresRole: ['ADMIN'] }
     },
     // Catch-all redirect
     {
@@ -80,7 +80,7 @@ const router = createRouter({
   ]
 })
 
-// Navigation Guards
+/* Navigation Guards
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
@@ -123,6 +123,9 @@ router.beforeEach(async (to, from, next) => {
   }
 
   next()
+})*/
+router.beforeEach((to, from, next) => {
+  // Allow all navigation in development
+  next()
 })
-
 export default router

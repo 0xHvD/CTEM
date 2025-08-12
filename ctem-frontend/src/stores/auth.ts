@@ -1,5 +1,50 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+
+export const useAuthStore = defineStore('auth', () => {
+  const isInitialized = ref(true)
+  const isAuthenticated = ref(true) // Force authentication for development
+  const user = ref({
+    id: 'demo-user',
+    name: 'Demo Admin',
+    email: 'admin@demo.local',
+    role: 'admin'
+  })
+
+  // Simplified auth methods for development
+  const initializeAuth = async () => {
+    isInitialized.value = true
+    return Promise.resolve()
+  }
+
+  const login = async () => {
+    isAuthenticated.value = true
+    return Promise.resolve()
+  }
+
+  const logout = async () => {
+    isAuthenticated.value = true // Keep authenticated for demo
+    return Promise.resolve()
+  }
+
+  // Mock interceptor setup
+  const setupInterceptors = () => {
+    console.log('Development mode: No interceptors needed')
+  }
+
+  return {
+    isInitialized,
+    isAuthenticated,
+    user,
+    initializeAuth,
+    login,
+    logout,
+    setupInterceptors
+  }
+})
+/*
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
 import axios from 'axios'
 
 interface User {
@@ -338,4 +383,4 @@ export const useAuthStore = defineStore('auth', () => {
     updateProfile,
     setupInterceptors
   }
-})
+})*/
